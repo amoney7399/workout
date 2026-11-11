@@ -69,9 +69,9 @@ function vW(){const s=S.session;
 if(!s){let h="<h1>Workout</h1>"+today();
 if(!S.routines.length)return h+'<div class="card"><h3>No routines yet</h3><p class="mu">Create your first routine to get started.</p><button class="pri" onclick="go(\'r\');newR()">+ Create New Routine</button></div>';
 h+=S.routines.map(r=>`<div class="card"><h3>${esc(r.name)}</h3><p class="mu">${r.ex.length} exercises</p><button class="pri" onclick="start('${r.id}')">Start workout</button></div>`).join("");
-return h+streak()}
+return h+(S.routines.length?'<button style="width:100%;margin-bottom:12px" onclick="pastQ()">+ Log a past workout</button>':"")+streak()}
 const r=S.routines.find(r=>r.id===s.rid);if(!r){S.session=null;save();return vW()}r.ex.forEach(e=>{if(!s.ex[e.id])s.ex[e.id]={joint:"",sets:Array.from({length:e.sets},()=>({w:"",r:"",d:false}))}});
-let h=`<h1>${esc(r.name)}</h1><div class="row" style="margin-bottom:12px"><label class="sw"><input type="checkbox" ${wakeOn?"checked":""} onchange="setWake(this.checked)">Screen awake</label><label class="sw"><input type="checkbox" ${S.deload?"checked":""} onchange="S.deload=this.checked;save();retarget();render()">Light week (-15%)</label></div><div class="mu" style="margin:-4px 0 10px">Light week = an easier recovery week where suggested weights are 15% lower. Your normal progress isn’t changed.</div>`;
+let h=`<h1>${esc(r.name)}</h1>${s.date?`<div class="warn">Logging a past workout for ${new Date(s.date).toLocaleDateString()}</div>`:""}<div class="row" style="margin-bottom:12px"><label class="sw"><input type="checkbox" ${wakeOn?"checked":""} onchange="setWake(this.checked)">Screen awake</label><label class="sw"><input type="checkbox" ${S.deload?"checked":""} onchange="S.deload=this.checked;save();retarget();render()">Light week (-15%)</label></div><div class="mu" style="margin:-4px 0 10px">Light week = an easier recovery week where suggested weights are 15% lower. Your normal progress isn’t changed.</div>`;
 r.ex.forEach(e=>{const st=s.ex[e.id],t=target(e,st.joint),lh=last(e.id),bw=e.type==="Bodyweight";
 h+=`<div class="card"><h3>${esc(e.name)}</h3><div class="mu">${e.sets} sets · ${e.lo}-${e.hi} reps · rest ${e.rest}s</div>${e.notes?`<div class="mu">${esc(e.notes)}</div>`:""}
 <div class="tg ${t.k}"><b>Today’s Target:</b> ${bw?"":t.w+" lbs × "}${t.rt} reps<br><span class="mu">${t.m}</span></div>
@@ -89,7 +89,7 @@ function retarget(){const s=S.session;if(!s)return;S.routines.find(r=>r.id===s.r
 function upd(id,i,k,v){const x=S.session.ex[id].sets[i];x[k]=v===""?"":+v;if(k==="w")x.m=1;save();
 const w=+x.w,r=+x.r,el=$("#pr-"+id+"-"+i);if(el){const b=best(id);el.style.display=(r>0&&w>=0&&b>0&&e1(w,r)>b)||(r>0&&b===0&&w>0&&false)?"inline-block":"none"}}
 function tog(id,i){const x=S.session.ex[id].sets[i];x.d=!x.d;save();render();
-if(x.d){const e=exs().find(e=>e.id===id);rtEnd=Date.now()+e.rest*1000;rtRun()}else rtStop()}
+if(x.d&&!S.session.date){const e=exs().find(e=>e.id===id);rtEnd=Date.now()+e.rest*1000;rtRun()}else rtStop()}
 function addSet(id){const a=S.session.ex[id].sets;a.push({w:a.length?a[a.length-1].w:"",r:"",d:false});save();render()}
 function jm(id){const x=S.session.ex[id];if(x.joint){x.joint="";retarget();save();render();return}
 modal(`<h3>Which area feels tight or sore?</h3><div class="chips">${["Shoulder","Knee","Elbow","Lower Back","Other"].map(a=>`<button onclick="setJ('${id}','${a}')">${a}</button>`).join("")}</div><button onclick="modal()">Cancel</button>`)}
@@ -99,9 +99,9 @@ const ex=r.ex.map(e=>{const x=s.ex[e.id];let b=best(e.id);const sets=x.sets.filt
 sets.forEach(q=>{vol+=q.w*q.r;const v=e1(q.w,q.r);if(b>0&&v>b){b=v;if(!prs.includes(e.name))prs.push(e.name)}else if(b===0)b=v});
 if(x.joint)joint=true;return{id:e.id,name:e.name,sets,joint:x.joint}}).filter(x=>x.sets.length);
 if(!ex.length){modal('<h3>Nothing to save</h3><p class="mu">Check off at least one set with reps first.</p><button onclick="modal()">OK</button>');return}
-const dur=Math.round((Date.now()-s.start)/60000);
-S.history.push({date:Date.now(),dur,routine:r.name,vol:Math.round(vol),prs,joint,ex});S.session=null;save();rtStop();render();
-modal(`<h3>Workout complete 🎉</h3><p>Volume: <b>${Math.round(vol).toLocaleString()} lbs</b><br>Duration: <b>${dur} min</b><br>PRs: <b>${prs.length?prs.join(", "):"none this time"}</b></p><button class="pri" onclick="modal()">Done</button>`)}
+const dur=s.date?0:Math.round((Date.now()-s.start)/60000);
+S.history.push({date:s.date?s.date+Math.floor(Math.random()*60000):Date.now(),dur,routine:r.name,vol:Math.round(vol),prs,joint,ex});S.history.sort((a,b)=>a.date-b.date);S.session=null;save();rtStop();render();
+modal(`<h3>Workout complete 🎉</h3><p>Volume: <b>${Math.round(vol).toLocaleString()} lbs</b><br>${dur?"Duration: <b>"+dur+" min</b><br>":""}PRs: <b>${prs.length?prs.join(", "):"none this time"}</b></p><button class="pri" onclick="modal()">Done</button>`)}
 function streak(){const d=new Set(S.history.map(h=>new Date(h.date).toDateString()));let n=0,c=new Date();if(!d.has(c.toDateString()))c.setDate(c.getDate()-1);
 while(d.has(c.toDateString())){n++;c.setDate(c.getDate()-1)}
 const m=new Date().getMonth(),cnt=[...d].filter(x=>new Date(x).getMonth()===m).length;
@@ -123,6 +123,9 @@ function vS(){return`<div class="card" style="margin-top:14px"><h3>Settings & ba
 function expo(){modal(`<h3>Export</h3><p class="mu">Copy this text and keep it somewhere safe.</p><textarea rows="8" readonly onfocus="this.select()">${esc(JSON.stringify(S))}</textarea><div class="row" style="margin-top:10px"><button class="pri" onclick="dl()">Download file</button><button onclick="modal()">Close</button></div>`)}function dl(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:"application/json"}));a.download="lift-log-backup.json";document.body.appendChild(a);a.click();a.remove()}function rf(i){const f=i.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$("#imp").value=r.result};r.readAsText(f)}
 function impo(){modal(`<h3>Import</h3><p class="mu">Choose a backup file, or paste the text. This replaces current data.</p><input type="file" accept=".json,application/json" onchange="rf(this)" style="margin-bottom:10px"><textarea id="imp" rows="8"></textarea><div class="row" style="margin-top:10px"><button class="pri" onclick="doImp()">Import</button><button onclick="modal()">Cancel</button></div>`)}
 function doImp(){try{const d=JSON.parse($("#imp").value);if(!d.routines||!d.history)throw 0;S=d;save();modal();render()}catch(e){modal('<h3>That is not valid backup data.</h3><button onclick="modal()">OK</button>')}}
+function pastQ(){const d=new Date();d.setDate(d.getDate()-1);const ds=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+modal('<h3>Log a past workout</h3><p class="mu">Pick the routine and the day you did it.</p><select id="pqr">'+S.routines.map(r=>'<option value="'+r.id+'">'+esc(r.name)+'</option>').join("")+'</select><input type="date" id="pqd" value="'+ds+'" style="margin:10px 0"><div class="row"><button class="pri" onclick="startPast()">Continue</button><button onclick="modal()">Cancel</button></div>')}
+function startPast(){const v=$("#pqd").value;if(!v)return;const p=v.split("-").map(Number),t=new Date(p[0],p[1]-1,p[2],12).getTime(),rid=$("#pqr").value;modal();start(rid);S.session.date=t;save();render()}
 function delW(d){modal('<h3>Delete this workout?</h3><div class="row"><button class="dng" onclick="doDelW('+d+')">Delete</button><button onclick="modal()">Cancel</button></div>')}
 function doDelW(d){S.history=S.history.filter(h=>h.date!==d);save();modal();render()}
 function delS(d,id,si){const h=S.history.find(h=>h.date===d);if(!h)return;const x=h.ex.find(x=>x.id===id);if(!x)return;x.sets.splice(si,1);if(!x.sets.length)h.ex=h.ex.filter(y=>y!==x);h.vol=Math.round(h.ex.reduce((t,y)=>t+y.sets.reduce((u,s)=>u+s.w*s.r,0),0));if(!h.ex.length)S.history=S.history.filter(y=>y!==h);pinfo="";save();render()}
@@ -159,7 +162,7 @@ if(!ids.includes(cx))cx=ids[0];
 return`<h1>Progress</h1><div class="card"><select onchange="cx=this.value;pinfo='';render()">${ids.map(i=>`<option value="${i}" ${i===cx?"selected":""}>${esc(nm(i))}</option>`).join("")}</select>
 <div class="row" style="margin:8px 0">${[["w","Weight"],["e","Est. 1RM"],["v","Volume"]].map(([k,l])=>`<button class="sm ${cm===k?"in":""}" onclick="cm='${k}';pinfo='';render()">${l}</button>`).join("")}</div>
 <div class="sc" id="ch"></div><div class="mu" id="pi">${pinfo||"Tap a dot for details"}</div></div>${streak()}
-<h3>History</h3>`+S.history.slice().reverse().map(h=>`<div class="card"><button class="dng sm" style="float:right" onclick="delW(${h.date})">🗑 Delete</button><b>${esc(h.routine)}</b>${h.joint?'<span class="tag">Modified / Joint-Care</span>':""}${h.prs.length?'<span class="tag">🔥 PR</span>':""}<div class="mu">${new Date(h.date).toLocaleDateString()} · ${h.dur} min · ${h.vol.toLocaleString()} lbs</div>${h.ex.map(x=>`<div class="mu">${esc(x.name)}: ${x.sets.map((s,si)=>`<span class="tag" style="margin:2px 4px 2px 0">${s.w}×${s.r}<b onclick="delS(${h.date},'${x.id}',${si})" style="color:#ef4444;padding:8px 6px;cursor:pointer">✕</b></span>`).join("")}${x.joint?" ("+esc(x.joint)+")":""}</div>`).join("")}</div>`).join("")}
+<h3>History</h3>`+S.history.slice().reverse().map(h=>`<div class="card"><button class="dng sm" style="float:right" onclick="delW(${h.date})">🗑 Delete</button><b>${esc(h.routine)}</b>${h.joint?'<span class="tag">Modified / Joint-Care</span>':""}${h.prs.length?'<span class="tag">🔥 PR</span>':""}<div class="mu">${new Date(h.date).toLocaleDateString()}${h.dur?" · "+h.dur+" min":""} · ${h.vol.toLocaleString()} lbs</div>${h.ex.map(x=>`<div class="mu">${esc(x.name)}: ${x.sets.map((s,si)=>`<span class="tag" style="margin:2px 4px 2px 0">${s.w}×${s.r}<b onclick="delS(${h.date},'${x.id}',${si})" style="color:#ef4444;padding:8px 6px;cursor:pointer">✕</b></span>`).join("")}${x.joint?" ("+esc(x.joint)+")":""}</div>`).join("")}</div>`).join("")}
 function chart(){const el=$("#ch");if(!el)return;const pts=[];
 S.history.forEach(h=>{const x=h.ex.find(x=>x.id===cx);if(!x)return;const s=x.sets;
 const v=cm==="w"?Math.max(...s.map(a=>a.w)):cm==="e"?Math.max(...s.map(a=>e1(a.w,a.r))):s.reduce((t,a)=>t+a.w*a.r,0);
