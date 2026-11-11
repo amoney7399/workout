@@ -1,0 +1,168 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="theme-color" content="#0f172a">
+<title>Lift Log</title>
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--tx:#fff;--mu:#94a3b8;--ac:#10b981;--in:#6366f1;--am:#f59e0b;--rd:#ef4444;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root{color-scheme:dark}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{height:100%;background:var(--bg)}body{margin:0;min-height:100%;background:var(--bg);color:var(--tx);font:16px/1.4 -apple-system,system-ui,Segoe UI,Roboto,sans-serif;padding-bottom:150px}
+#app{padding:14px;max-width:600px;margin:auto}
+h1{font-size:24px;margin:6px 0 12px}h3{margin:0 0 6px}
+.card{background:var(--card);border-radius:16px;padding:14px;margin-bottom:12px}
+button{font:inherit;border:0;border-radius:12px;padding:12px 16px;background:#334155;color:var(--tx);min-height:44px;transition:.15s}
+button:active{transform:scale(.96)}
+.pri{background:var(--ac);color:#04231a;font-weight:700;width:100%}.in{background:var(--in)}.dng{background:var(--rd)}
+.sm{padding:6px 10px;min-height:34px;font-size:14px}
+input,select,textarea{font:inherit;background:#0f172a;color:var(--tx);border:1px solid #334155;border-radius:10px;padding:10px;width:100%;min-height:44px}
+.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}.row>.fx{flex:0 0 auto}
+.mu{color:var(--mu);font-size:13px}.tg{background:#064e3b;border-radius:10px;padding:8px 10px;margin:8px 0;font-size:14px}
+.tg.up{background:#312e81}.tg.dn{background:#78350f}.warn{background:#451a03;color:#fde68a;border-radius:10px;padding:8px 10px;margin:8px 0;font-size:13px}
+.set{display:grid;grid-template-columns:24px 1fr 1fr 48px;gap:6px;align-items:center;margin-top:8px}
+.set small{grid-column:2/5;color:var(--mu);font-size:12px;margin-top:-4px}
+.ck{background:#334155;font-size:20px}.ck.on{background:var(--ac);color:#04231a}
+.pr{display:none;background:var(--am);color:#000;border-radius:8px;padding:1px 6px;font-size:12px;font-weight:700;margin-left:6px}
+nav{position:fixed;z-index:20;left:0;right:0;bottom:0;display:flex;background:#111c33;border-top:1px solid #334155;padding-bottom:env(safe-area-inset-bottom,0px)}
+nav button{flex:1;border-radius:0;background:none;color:var(--mu);padding:14px 4px}nav button.on{color:var(--ac);font-weight:700}
+#rt{position:fixed;left:10px;right:10px;bottom:calc(66px + env(safe-area-inset-bottom,0px));background:var(--in);border-radius:16px;padding:10px;display:none;align-items:center;gap:6px;z-index:5}
+#rt b{flex:1;font-size:22px;text-align:center}#rt button{background:#ffffff33;padding:8px 10px;min-height:38px}
+#md{position:fixed;inset:0;background:#000b;display:none;align-items:center;justify-content:center;padding:20px;z-index:9}
+#md>div{background:var(--card);border-radius:16px;padding:18px;width:100%;max-width:420px;max-height:85%;overflow:auto}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}.tag{font-size:12px;background:#334155;border-radius:8px;padding:2px 8px;margin-left:4px}
+.sw{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mu)}.sw input{width:20px;min-height:20px}
+.sc{overflow-x:auto}svg text{fill:#94a3b8;font-size:10px}
+</style></head><body>
+<div id="app"></div>
+<div id="rt"><button onclick="rtAdd(-15)">-15s</button><b id="rtt">0:00</b><button onclick="rtAdd(15)">+15s</button><button onclick="rtStop()">Skip</button></div>
+<div id="md"><div id="mdc"></div></div>
+<nav><button data-t="w" onclick="go('w')">Workout</button><button data-t="p" onclick="go('p')">Progress</button><button data-t="r" onclick="go('r')">Routines</button></nav>
+<script>
+const $=s=>document.querySelector(s);
+let S=null;try{S=JSON.parse(localStorage.getItem("ll"))}catch(e){}
+S=S||{routines:[],history:[],session:null,deload:false};S.sched=S.sched||{};
+const save=()=>{try{localStorage.setItem("ll",JSON.stringify(S))}catch(e){}};
+let tab="w",draft=null,wake=null,wakeOn=false,rtEnd=0,rtI=null,cx="",cm="w",pinfo="",setOpen=false;
+const uid=()=>Math.random().toString(36).slice(2,9);
+const rnd=(v,i)=>Math.round(v/i)*i;
+const e1=(w,r)=>w*(1+r/30);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const exs=()=>S.routines.flatMap(r=>r.ex);
+function last(id,normal){for(let i=S.history.length-1;i>=0;i--){const x=S.history[i].ex.find(x=>x.id===id&&(!normal||!x.joint));if(x&&x.sets.length)return x}return null}
+function best(id){let b=0;S.history.forEach(h=>h.ex.forEach(x=>{if(x.id===id)x.sets.forEach(s=>b=Math.max(b,e1(s.w,s.r)))}));return b}
+function target(e,joint){const h=last(e.id,true);let w=+e.start||0,r=e.lo,m=e.start?"Starting weight":"Pick a starting weight today",k="";
+if(h){const ss=h.sets;w=Math.max(...ss.map(s=>s.w));
+if(ss.every(s=>s.r>=e.hi)){w+=e.inc;r=e.lo;k="up";m="Level up: you maxed out "+(w-e.inc)+" lbs!"}
+else if(ss.filter(s=>s.r<e.lo).length>1){w=Math.max(0,w-e.inc);r=e.lo;k="dn";m="Step back to rebuild reps"}
+else{r=Math.min(e.hi,Math.min(...ss.map(s=>s.r))+1);m="Build reps: same weight, +1 rep per set"}}
+if(S.deload&&w){w=rnd(w*.85,e.inc);m+=" (deload -15%)"}
+let rt=String(r);if(joint){w=rnd(w*.8,e.inc);rt=(e.lo+4)+"-"+(e.hi+5);m="Joint-friendly: -20% load, higher reps"}
+return{w,rt,m,k}}
+function plateau(e){const hs=S.history.filter(h=>h.ex.some(x=>x.id===e.id&&!x.joint&&x.sets.length)).slice(-3).map(h=>h.ex.find(x=>x.id===e.id).sets);
+if(hs.length<3)return false;const top=a=>[Math.max(...a.map(s=>s.w)),Math.max(...a.map(s=>s.r))];
+const a=top(hs[0]),c=top(hs[2]);return c[0]<=a[0]&&c[1]<=a[1]}
+function go(t){tab=t;render()}
+function render(){document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.t===tab));
+try{$("#app").innerHTML=tab==="w"?vW():tab==="p"?vP():vR();if(tab==="p")chart()}catch(e){$("#app").innerHTML='<div class="card"><h3>Something went wrong</h3><p class="mu">'+esc(e.message)+'</p></div>'}}
+/* ---------- Workout ---------- */
+function vW(){const s=S.session;
+if(!s){let h="<h1>Workout</h1>"+today();
+if(!S.routines.length)return h+'<div class="card"><h3>No routines yet</h3><p class="mu">Create your first routine to get started.</p><button class="pri" onclick="go(\'r\');newR()">+ Create New Routine</button></div>';
+h+=S.routines.map(r=>`<div class="card"><h3>${esc(r.name)}</h3><p class="mu">${r.ex.length} exercises</p><button class="pri" onclick="start('${r.id}')">Start workout</button></div>`).join("");
+return h+streak()}
+const r=S.routines.find(r=>r.id===s.rid);if(!r){S.session=null;save();return vW()}r.ex.forEach(e=>{if(!s.ex[e.id])s.ex[e.id]={joint:"",sets:Array.from({length:e.sets},()=>({w:"",r:"",d:false}))}});
+let h=`<h1>${esc(r.name)}</h1><div class="row" style="margin-bottom:12px"><label class="sw"><input type="checkbox" ${wakeOn?"checked":""} onchange="setWake(this.checked)">Screen awake</label><label class="sw"><input type="checkbox" ${S.deload?"checked":""} onchange="S.deload=this.checked;save();retarget();render()">Light week (-15%)</label></div><div class="mu" style="margin:-4px 0 10px">Light week = an easier recovery week where suggested weights are 15% lower. Your normal progress isn’t changed.</div>`;
+r.ex.forEach(e=>{const st=s.ex[e.id],t=target(e,st.joint),lh=last(e.id),bw=e.type==="Bodyweight";
+h+=`<div class="card"><h3>${esc(e.name)}</h3><div class="mu">${e.sets} sets · ${e.lo}-${e.hi} reps · rest ${e.rest}s</div>${e.notes?`<div class="mu">${esc(e.notes)}</div>`:""}
+<div class="tg ${t.k}"><b>Today’s Target:</b> ${bw?"":t.w+" lbs × "}${t.rt} reps<br><span class="mu">${t.m}</span></div>
+${plateau(e)&&!st.joint?'<div class="warn">Plateau tip: no progress in 3 sessions. Try a smaller jump or a deload week.</div>':""}
+${st.joint?`<div class="warn">Joint-Friendly Mode (${esc(st.joint)}): Lighter load, higher reps, slower tempo. Stop immediately if you feel sharp, pinching, or worsening pain.</div>`:""}`;
+st.sets.forEach((x,i)=>{const l=lh&&lh.sets[i]?lh.sets[i]:null;
+h+=`<div class="set"><span class="mu">${i+1}</span>${bw?"<span></span>":`<input type="number" step="any" inputmode="decimal" placeholder="lbs" value="${x.w}" oninput="upd('${e.id}',${i},'w',this.value)">`}<input type="number" inputmode="numeric" placeholder="reps" value="${x.r}" oninput="upd('${e.id}',${i},'r',this.value)"><button class="ck ${x.d?"on":""}" onclick="tog('${e.id}',${i})">✓</button>
+<small>${l?"Last: "+(bw?"":l.w+" lbs × ")+l.r:"Last: -"}<span class="pr" id="pr-${e.id}-${i}">🔥 NEW PR</span></small></div>`});
+h+=`<div class="row" style="margin-top:10px"><button class="sm" onclick="addSet('${e.id}')">+ Set</button><button class="sm" onclick="jm('${e.id}')">⚠️ ${st.joint?"Clear discomfort":"Discomfort"}</button></div></div>`});
+return h+'<button class="pri" onclick="finish()">Finish Workout</button><button class="dng" style="width:100%;margin-top:10px" onclick="askDiscard()">Discard</button>'}
+function start(rid){const r=S.routines.find(r=>r.id===rid),ex={};
+r.ex.forEach(e=>{const t=target(e,false);ex[e.id]={joint:"",sets:Array.from({length:e.sets},()=>({w:t.w||"",r:"",d:false}))}});
+S.session={rid,start:Date.now(),ex};save();render()}
+function retarget(){const s=S.session;if(!s)return;S.routines.find(r=>r.id===s.rid).ex.forEach(e=>{const x=s.ex[e.id],t=target(e,x.joint);x.sets.forEach(q=>{if(!q.d&&!q.m)q.w=t.w||""})})}
+function upd(id,i,k,v){const x=S.session.ex[id].sets[i];x[k]=v===""?"":+v;if(k==="w")x.m=1;save();
+const w=+x.w,r=+x.r,el=$("#pr-"+id+"-"+i);if(el){const b=best(id);el.style.display=(r>0&&w>=0&&b>0&&e1(w,r)>b)||(r>0&&b===0&&w>0&&false)?"inline-block":"none"}}
+function tog(id,i){const x=S.session.ex[id].sets[i];x.d=!x.d;save();render();
+if(x.d){const e=exs().find(e=>e.id===id);rtEnd=Date.now()+e.rest*1000;rtRun()}else rtStop()}
+function addSet(id){const a=S.session.ex[id].sets;a.push({w:a.length?a[a.length-1].w:"",r:"",d:false});save();render()}
+function jm(id){const x=S.session.ex[id];if(x.joint){x.joint="";retarget();save();render();return}
+modal(`<h3>Which area feels tight or sore?</h3><div class="chips">${["Shoulder","Knee","Elbow","Lower Back","Other"].map(a=>`<button onclick="setJ('${id}','${a}')">${a}</button>`).join("")}</div><button onclick="modal()">Cancel</button>`)}
+function setJ(id,a){const x=S.session.ex[id],e=exs().find(e=>e.id===id),t=target(e,true);x.joint=a;x.sets.forEach(q=>{if(!q.d)q.w=t.w||""});save();modal();render()}
+function finish(){const s=S.session,r=S.routines.find(r=>r.id===s.rid);let vol=0,prs=[],joint=false;const run={};
+const ex=r.ex.map(e=>{const x=s.ex[e.id];let b=best(e.id);const sets=x.sets.filter(q=>q.d&&+q.r>0).map(q=>({w:+q.w||0,r:+q.r}));
+sets.forEach(q=>{vol+=q.w*q.r;const v=e1(q.w,q.r);if(b>0&&v>b){b=v;if(!prs.includes(e.name))prs.push(e.name)}else if(b===0)b=v});
+if(x.joint)joint=true;return{id:e.id,name:e.name,sets,joint:x.joint}}).filter(x=>x.sets.length);
+if(!ex.length){modal('<h3>Nothing to save</h3><p class="mu">Check off at least one set with reps first.</p><button onclick="modal()">OK</button>');return}
+const dur=Math.round((Date.now()-s.start)/60000);
+S.history.push({date:Date.now(),dur,routine:r.name,vol:Math.round(vol),prs,joint,ex});S.session=null;save();rtStop();render();
+modal(`<h3>Workout complete 🎉</h3><p>Volume: <b>${Math.round(vol).toLocaleString()} lbs</b><br>Duration: <b>${dur} min</b><br>PRs: <b>${prs.length?prs.join(", "):"none this time"}</b></p><button class="pri" onclick="modal()">Done</button>`)}
+function streak(){const d=new Set(S.history.map(h=>new Date(h.date).toDateString()));let n=0,c=new Date();if(!d.has(c.toDateString()))c.setDate(c.getDate()-1);
+while(d.has(c.toDateString())){n++;c.setDate(c.getDate()-1)}
+const m=new Date().getMonth(),cnt=[...d].filter(x=>new Date(x).getMonth()===m).length;
+return`<div class="card"><h3>🔥 ${n}-day streak</h3><div class="mu">${cnt} workout days this month</div></div>`}
+/* ---------- Timer / wake ---------- */
+function rtRun(){clearInterval(rtI);$("#rt").style.display="flex";const t=()=>{const l=Math.ceil((rtEnd-Date.now())/1000);
+if(l<=0){rtStop();try{navigator.vibrate&&navigator.vibrate([300,150,300])}catch(e){}return}$("#rtt").textContent=Math.floor(l/60)+":"+String(l%60).padStart(2,"0")};t();rtI=setInterval(t,500)}
+function rtAdd(n){rtEnd+=n*1000;rtRun()}function rtStop(){clearInterval(rtI);$("#rt").style.display="none"}
+async function setWake(on){wakeOn=on;try{if(on&&navigator.wakeLock)wake=await navigator.wakeLock.request("screen");else if(wake){await wake.release();wake=null}}catch(e){}}
+document.addEventListener("visibilitychange",()=>{if(wakeOn&&document.visibilityState==="visible")setWake(true)});
+function modal(h){const m=$("#md");if(!h){m.style.display="none";return}$("#mdc").innerHTML=h;m.style.display="flex"}
+/* ---------- Routines ---------- */
+function vR(){if(draft)return vE();
+let h="<h1>Routines</h1>";
+if(!S.routines.length)h+='<div class="card"><h3>Welcome 👋</h3><p class="mu">Add your own routines and exercises. The app will coach your progression from there.</p></div>';
+h+=S.routines.map(r=>`<div class="card"><h3>${esc(r.name)}</h3><div class="mu">${r.ex.map(e=>esc(e.name)).join(" · ")||"No exercises"}</div><div class="row" style="margin-top:10px"><button onclick="editR('${r.id}')">Edit</button><button class="dng" onclick="delR('${r.id}')">Delete</button></div></div>`).join("");
+return h+'<button class="pri" onclick="newR()">+ Create New Routine</button>'+vSch()+vS()}
+function vS(){return`<div class="card" style="margin-top:14px"><h3>Backup</h3><div class="row"><button onclick="expo()">Export JSON</button><button onclick="impo()">Import JSON</button></div></div>`}
+function expo(){modal(`<h3>Export</h3><p class="mu">Copy this text and keep it somewhere safe.</p><textarea rows="8" readonly onfocus="this.select()">${esc(JSON.stringify(S))}</textarea><div class="row" style="margin-top:10px"><button class="pri" onclick="dl()">Download file</button><button onclick="modal()">Close</button></div>`)}function dl(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:"application/json"}));a.download="lift-log-backup.json";document.body.appendChild(a);a.click();a.remove()}function rf(i){const f=i.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$("#imp").value=r.result};r.readAsText(f)}
+function impo(){modal(`<h3>Import</h3><p class="mu">Choose a backup file, or paste the text. This replaces current data.</p><input type="file" accept=".json,application/json" onchange="rf(this)" style="margin-bottom:10px"><textarea id="imp" rows="8"></textarea><div class="row" style="margin-top:10px"><button class="pri" onclick="doImp()">Import</button><button onclick="modal()">Cancel</button></div>`)}
+function doImp(){try{const d=JSON.parse($("#imp").value);if(!d.routines||!d.history)throw 0;S=d;save();modal();render()}catch(e){modal('<h3>That is not valid backup data.</h3><button onclick="modal()">OK</button>')}}
+function newR(){draft={id:uid(),name:"",ex:[]};render()}
+function editR(id){draft=JSON.parse(JSON.stringify(S.routines.find(r=>r.id===id)));render()}
+function askDiscard(){modal('<h3>Discard this workout?</h3><div class="row"><button class="dng" onclick="S.session=null;save();rtStop();modal();render()">Discard</button><button onclick="modal()">Keep going</button></div>')}
+function delR(id){modal('<h3>Delete this routine?</h3><div class="row"><button class="dng" onclick="doDel(\''+id+'\')">Delete</button><button onclick="modal()">Cancel</button></div>')}
+function doDel(id){S.routines=S.routines.filter(r=>r.id!==id);for(const k in S.sched)if(S.sched[k]===id)S.sched[k]="";save();modal();render()}
+function today(){if(!S.routines.length)return"";const d=new Date().getDay(),v=S.sched[d],dn=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+if(v==="cardio")return`<div class="card"><h3>${dn[d]}: Cardio day 🏃</h3><p class="mu">Nothing to log here. Enjoy it!</p></div>`;
+const r=S.routines.find(r=>r.id===v);
+if(!r)return`<div class="card"><h3>${dn[d]}</h3><p class="mu">No workout scheduled. Set your week in the Routines tab, or pick one below.</p></div>`;
+return`<div class="card" style="border:2px solid var(--ac)"><div class="mu">Today · ${dn[d]}</div><h3>${esc(r.name)}</h3><p class="mu">${r.ex.length} exercises</p><button class="pri" onclick="start('${r.id}')">Start today’s workout</button></div>`}
+function vSch(){const dn=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+return`<div class="card" style="margin-top:14px"><h3>Weekly schedule</h3><p class="mu">Pick what you do each day. The Workout tab shows today’s workout automatically.</p>${[1,2,3,4,5,6,0].map(d=>`<div class="row" style="margin-top:8px"><span class="fx" style="width:96px">${dn[d]}</span><select onchange="S.sched[${d}]=this.value;save()"><option value="">Off</option><option value="cardio" ${S.sched[d]==="cardio"?"selected":""}>Cardio</option>${S.routines.map(r=>`<option value="${r.id}" ${S.sched[d]===r.id?"selected":""}>${esc(r.name)}</option>`).join("")}</select></div>`).join("")}</div>`}
+function vE(){let h=`<h1>Edit routine</h1><div class="card"><input placeholder="Routine name (e.g. Push Day)" value="${esc(draft.name)}" oninput="draft.name=this.value"></div>`;
+draft.ex.forEach((e,i)=>{h+=`<div class="card"><input placeholder="Exercise name" value="${esc(e.name)}" oninput="draft.ex[${i}].name=this.value">
+<div class="row" style="margin-top:8px"><select onchange="draft.ex[${i}].type=this.value">${["Weighted","Bodyweight","Weighted Bodyweight"].map(t=>`<option ${e.type===t?"selected":""}>${t}</option>`).join("")}</select></div>
+<div class="row mu" style="margin-top:8px"><span>Sets<input type="number" inputmode="numeric" value="${e.sets}" oninput="draft.ex[${i}].sets=+this.value||1"></span><span>Min reps<input type="number" inputmode="numeric" value="${e.lo}" oninput="draft.ex[${i}].lo=+this.value||1"></span><span>Max reps<input type="number" inputmode="numeric" value="${e.hi}" oninput="draft.ex[${i}].hi=+this.value||1"></span></div>
+<div class="row mu" style="margin-top:8px"><span>Starting weight<input type="number" inputmode="decimal" step="any" value="${e.start||""}" oninput="draft.ex[${i}].start=+this.value||0"></span><span>Jump size (lbs)<input type="number" inputmode="decimal" step="any" value="${e.inc}" oninput="draft.ex[${i}].inc=+this.value||5"></span><span>Rest (sec)<input type="number" inputmode="numeric" value="${e.rest}" oninput="draft.ex[${i}].rest=+this.value||30"></span></div>
+<div class="mu" style="margin-top:6px">Jump size = how much weight to add when you hit the top of your rep range. Any number works (2, 1.25, 10).</div><textarea rows="2" style="margin-top:8px" placeholder="Notes (seat setting, form cues)" oninput="draft.ex[${i}].notes=this.value">${esc(e.notes)}</textarea>
+<button class="dng sm" style="margin-top:8px" onclick="draft.ex.splice(${i},1);render()">Remove</button></div>`});
+return h+`<button style="width:100%;margin-bottom:10px" onclick="draft.ex.push({id:uid(),name:'',type:'Weighted',sets:3,lo:8,hi:12,inc:5,rest:90,notes:''});render()">+ Add exercise</button><div class="row"><button class="pri" onclick="saveR()">Save routine</button><button onclick="draft=null;render()">Cancel</button></div>`}
+function saveR(){if(!draft.name.trim()){modal('<h3>Give the routine a name.</h3><button onclick="modal()">OK</button>');return}draft.ex=draft.ex.filter(e=>e.name.trim());
+const i=S.routines.findIndex(r=>r.id===draft.id);i>=0?S.routines[i]=draft:S.routines.push(draft);draft=null;save();render()}
+/* ---------- Progress ---------- */
+function vP(){const all=exs();const ids=[...new Set(S.history.flatMap(h=>h.ex.map(x=>x.id)))];
+if(!ids.length)return'<h1>Progress</h1><div class="card"><p class="mu">Finish a workout to see charts and history here.</p></div>'+streak();
+const nm=id=>(exs().find(e=>e.id===id)||S.history.flatMap(h=>h.ex).find(x=>x.id===id)).name;
+if(!ids.includes(cx))cx=ids[0];
+return`<h1>Progress</h1><div class="card"><select onchange="cx=this.value;pinfo='';render()">${ids.map(i=>`<option value="${i}" ${i===cx?"selected":""}>${esc(nm(i))}</option>`).join("")}</select>
+<div class="row" style="margin:8px 0">${[["w","Weight"],["e","Est. 1RM"],["v","Volume"]].map(([k,l])=>`<button class="sm ${cm===k?"in":""}" onclick="cm='${k}';pinfo='';render()">${l}</button>`).join("")}</div>
+<div class="sc" id="ch"></div><div class="mu" id="pi">${pinfo||"Tap a dot for details"}</div></div>${streak()}
+<h3>History</h3>`+S.history.slice().reverse().map(h=>`<div class="card"><b>${esc(h.routine)}</b>${h.joint?'<span class="tag">Modified / Joint-Care</span>':""}${h.prs.length?'<span class="tag">🔥 PR</span>':""}<div class="mu">${new Date(h.date).toLocaleDateString()} · ${h.dur} min · ${h.vol.toLocaleString()} lbs</div>${h.ex.map(x=>`<div class="mu">${esc(x.name)}: ${x.sets.map(s=>s.w+"×"+s.r).join(", ")}${x.joint?" ("+esc(x.joint)+")":""}</div>`).join("")}</div>`).join("")}
+function chart(){const el=$("#ch");if(!el)return;const pts=[];
+S.history.forEach(h=>{const x=h.ex.find(x=>x.id===cx);if(!x)return;const s=x.sets;
+const v=cm==="w"?Math.max(...s.map(a=>a.w)):cm==="e"?Math.max(...s.map(a=>e1(a.w,a.r))):s.reduce((t,a)=>t+a.w*a.r,0);
+pts.push({v:Math.round(v*10)/10,d:h.date,s,j:x.joint})});
+if(!pts.length)return;const W=Math.max(320,pts.length*50),H=200,p=30,mn=Math.min(...pts.map(a=>a.v)),mx=Math.max(...pts.map(a=>a.v)),rg=(mx-mn)||1;
+const X=i=>p+(pts.length>1?i*(W-2*p)/(pts.length-1):(W-2*p)/2),Y=v=>H-p-(v-mn)/rg*(H-2*p);
+el.innerHTML=`<svg width="${W}" height="${H}"><polyline fill="none" stroke="#10b981" stroke-width="2.5" points="${pts.map((a,i)=>X(i)+","+Y(a.v)).join(" ")}"/>
+${pts.map((a,i)=>`<circle cx="${X(i)}" cy="${Y(a.v)}" r="9" fill="${a.j?"#f59e0b":"#6366f1"}" stroke="#fff" stroke-width="2" style="cursor:pointer" onclick="dot(${i})"/><text x="${X(i)}" y="${H-8}" text-anchor="middle">${new Date(a.d).getMonth()+1}/${new Date(a.d).getDate()}</text>`).join("")}
+<text x="2" y="${Y(mx)+3}">${Math.round(mx)}</text><text x="2" y="${Y(mn)+3}">${Math.round(mn)}</text></svg>`;window._pts=pts}
+function dot(i){const a=window._pts[i];pinfo=new Date(a.d).toLocaleDateString()+": "+a.v+" · sets "+a.s.map(s=>s.w+"×"+s.r).join(", ")+(a.j?" · joint-care ("+a.j+")":"");$("#pi").textContent=pinfo}
+render();if(S.session&&false)rtStop();
+</script></body></html>
