@@ -42,12 +42,12 @@ const $=s=>document.querySelector(s);
 let S=null;try{S=JSON.parse(localStorage.getItem("ll"))}catch(e){}
 S=S||{routines:[],history:[],session:null,deload:false};S.sched=S.sched||{};
 const save=()=>{try{localStorage.setItem("ll",JSON.stringify(S))}catch(e){}};
-let tab="w",draft=null,wake=null,wakeOn=false,rtEnd=0,rtI=null,cx="",cm="w",pinfo="",setOpen=false;
+let pf="all",ct="l",tab="w",draft=null,wake=null,wakeOn=false,rtEnd=0,rtI=null,cx="",cm="w",pinfo="",setOpen=false;
 const uid=()=>Math.random().toString(36).slice(2,9);
 const rnd=(v,i)=>Math.round(v/i)*i;
 const e1=(w,r)=>w*(1+r/30);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const exs=()=>S.routines.flatMap(r=>r.ex);
+const exs=()=>S.routines.flatMap(r=>r.ex).concat((S.session&&S.session.list)||[]);
 function last(id,normal){for(let i=S.history.length-1;i>=0;i--){const x=S.history[i].ex.find(x=>x.id===id&&(!normal||!x.joint));if(x&&x.sets.length)return x}return null}
 function best(id){let b=0;S.history.forEach(h=>h.ex.forEach(x=>{if(x.id===id)x.sets.forEach(s=>b=Math.max(b,e1(s.w,s.r)))}));return b}
 function target(e,joint){const h=last(e.id,true);let w=+e.start||0,r=e.lo,m=e.start?"Starting weight":"Pick a starting weight today",k="";
@@ -63,16 +63,16 @@ if(hs.length<3)return false;const top=a=>[Math.max(...a.map(s=>s.w)),Math.max(..
 const a=top(hs[0]),c=top(hs[2]);return c[0]<=a[0]&&c[1]<=a[1]}
 function go(t){tab=t;render()}
 function render(){document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.t===tab));
-try{$("#app").innerHTML=tab==="w"?vW():tab==="p"?vP():vR();if(tab==="p")chart()}catch(e){$("#app").innerHTML='<div class="card"><h3>Something went wrong</h3><p class="mu">'+esc(e.message)+'</p></div>'}}
+try{$("#app").innerHTML=tab==="w"?vW():tab==="p"?vP():vR();if(tab==="p"){chart();bars()}}catch(e){$("#app").innerHTML='<div class="card"><h3>Something went wrong</h3><p class="mu">'+esc(e.message)+'</p></div>'}}
 /* ---------- Workout ---------- */
 function vW(){const s=S.session;
 if(!s){let h="<h1>Workout</h1>"+today();
 if(!S.routines.length)return h+'<div class="card"><h3>No routines yet</h3><p class="mu">Create your first routine to get started.</p><button class="pri" onclick="go(\'r\');newR()">+ Create New Routine</button></div>';
 h+=S.routines.map(r=>`<div class="card"><h3>${esc(r.name)}</h3><p class="mu">${r.ex.length} exercises</p><button class="pri" onclick="start('${r.id}')">Start workout</button></div>`).join("");
 return h+(S.routines.length?'<button style="width:100%;margin-bottom:12px" onclick="pastQ()">+ Log a past workout</button>':"")+streak()}
-const r=S.routines.find(r=>r.id===s.rid);if(!r){S.session=null;save();return vW()}r.ex.forEach(e=>{if(!s.ex[e.id])s.ex[e.id]={joint:"",sets:Array.from({length:e.sets},()=>({w:"",r:"",d:false}))}});
+const r=S.routines.find(r=>r.id===s.rid);if(!r){S.session=null;save();return vW()}if(!s.list)s.list=JSON.parse(JSON.stringify(r.ex));s.list.forEach(e=>{if(!s.ex[e.id])s.ex[e.id]={joint:"",sets:Array.from({length:e.sets},()=>({w:"",r:"",d:false}))}});
 let h=`<h1>${esc(r.name)}</h1>${s.date?`<div class="warn">Logging a past workout for ${new Date(s.date).toLocaleDateString()}</div>`:""}<div class="row" style="margin-bottom:12px"><label class="sw"><input type="checkbox" ${wakeOn?"checked":""} onchange="setWake(this.checked)">Screen awake</label><label class="sw"><input type="checkbox" ${S.deload?"checked":""} onchange="S.deload=this.checked;save();retarget();render()">Light week (-15%)</label></div><div class="mu" style="margin:-4px 0 10px">Light week = an easier recovery week where suggested weights are 15% lower. Your normal progress isn’t changed.</div>`;
-r.ex.forEach(e=>{const st=s.ex[e.id],t=target(e,st.joint),lh=last(e.id),bw=e.type==="Bodyweight";
+s.list.forEach(e=>{const st=s.ex[e.id],t=target(e,st.joint),lh=last(e.id),bw=e.type==="Bodyweight";
 h+=`<div class="card"><h3>${esc(e.name)}</h3><div class="mu">${e.sets} sets · ${e.lo}-${e.hi} reps · rest ${e.rest}s</div>${e.notes?`<div class="mu">${esc(e.notes)}</div>`:""}
 <div class="tg ${t.k}"><b>Today’s Target:</b> ${bw?"":t.w+" lbs × "}${t.rt} reps<br><span class="mu">${t.m}</span></div>
 ${plateau(e)&&!st.joint?'<div class="warn">Plateau tip: no progress in 3 sessions. Try a smaller jump or a deload week.</div>':""}
@@ -80,12 +80,12 @@ ${st.joint?`<div class="warn">Joint-Friendly Mode (${esc(st.joint)}): Lighter lo
 st.sets.forEach((x,i)=>{const l=lh&&lh.sets[i]?lh.sets[i]:null;
 h+=`<div class="set"><span class="mu">${i+1}</span>${bw?"<span></span>":`<input type="number" step="any" inputmode="decimal" placeholder="lbs" value="${x.w}" oninput="upd('${e.id}',${i},'w',this.value)">`}<input type="number" inputmode="numeric" placeholder="reps" value="${x.r}" oninput="upd('${e.id}',${i},'r',this.value)"><button class="ck ${x.d?"on":""}" onclick="tog('${e.id}',${i})">✓</button>
 <small>${l?"Last: "+(bw?"":l.w+" lbs × ")+l.r:"Last: -"}<span class="pr" id="pr-${e.id}-${i}">🔥 NEW PR</span><button class="dng sm" style="float:right;min-height:30px;padding:2px 12px" onclick="rmSet('${e.id}',${i})">✕</button></small></div>`});
-h+=`<div class="row" style="margin-top:10px"><button class="sm" onclick="addSet('${e.id}')">+ Set</button><button class="sm" onclick="jm('${e.id}')">⚠️ ${st.joint?"Clear discomfort":"Discomfort"}</button></div></div>`});
-return h+'<button class="pri" onclick="finish()">Finish Workout</button><button class="dng" style="width:100%;margin-top:10px" onclick="askDiscard()">Discard</button>'}
+h+=`<div class="row" style="margin-top:10px"><button class="sm" onclick="addSet('${e.id}')">+ Set</button><button class="sm" onclick="jm('${e.id}')">⚠️ ${st.joint?"Clear discomfort":"Discomfort"}</button><button class="sm" onclick="nameQ('swap','${e.id}')">🔄 Swap</button></div></div>`});
+return h+'<button style="width:100%;margin-bottom:10px" onclick="nameQ(\'add\')">+ Add exercise</button><button class="pri" onclick="finish()">Finish Workout</button><button class="dng" style="width:100%;margin-top:10px" onclick="askDiscard()">Discard</button>'}
 function start(rid){const r=S.routines.find(r=>r.id===rid),ex={};
 r.ex.forEach(e=>{const t=target(e,false);ex[e.id]={joint:"",sets:Array.from({length:e.sets},()=>({w:t.w||"",r:"",d:false}))}});
-S.session={rid,start:Date.now(),ex};save();render()}
-function retarget(){const s=S.session;if(!s)return;S.routines.find(r=>r.id===s.rid).ex.forEach(e=>{const x=s.ex[e.id],t=target(e,x.joint);x.sets.forEach(q=>{if(!q.d&&!q.m)q.w=t.w||""})})}
+S.session={rid,start:Date.now(),ex,list:JSON.parse(JSON.stringify(r.ex))};save();render()}
+function retarget(){const s=S.session;if(!s)return;(s.list||S.routines.find(r=>r.id===s.rid).ex).forEach(e=>{const x=s.ex[e.id],t=target(e,x.joint);x.sets.forEach(q=>{if(!q.d&&!q.m)q.w=t.w||""})})}
 function upd(id,i,k,v){const x=S.session.ex[id].sets[i];x[k]=v===""?"":+v;if(k==="w")x.m=1;save();
 const w=+x.w,r=+x.r,el=$("#pr-"+id+"-"+i);if(el){const b=best(id);el.style.display=(r>0&&w>=0&&b>0&&e1(w,r)>b)||(r>0&&b===0&&w>0&&false)?"inline-block":"none"}}
 function tog(id,i){const x=S.session.ex[id].sets[i];x.d=!x.d;save();render();
@@ -95,7 +95,7 @@ function jm(id){const x=S.session.ex[id];if(x.joint){x.joint="";retarget();save(
 modal(`<h3>Which area feels tight or sore?</h3><div class="chips">${["Shoulder","Knee","Elbow","Lower Back","Other"].map(a=>`<button onclick="setJ('${id}','${a}')">${a}</button>`).join("")}</div><button onclick="modal()">Cancel</button>`)}
 function setJ(id,a){const x=S.session.ex[id],e=exs().find(e=>e.id===id),t=target(e,true);x.joint=a;x.sets.forEach(q=>{if(!q.d)q.w=t.w||""});save();modal();render()}
 function finish(){const s=S.session,r=S.routines.find(r=>r.id===s.rid);let vol=0,prs=[],joint=false;const run={};
-const ex=r.ex.map(e=>{const x=s.ex[e.id];let b=best(e.id);const sets=x.sets.filter(q=>q.d&&+q.r>0).map(q=>({w:+q.w||0,r:+q.r}));
+const ex=(s.list||r.ex).map(e=>{const x=s.ex[e.id];let b=best(e.id);const sets=x.sets.filter(q=>q.d&&+q.r>0).map(q=>({w:+q.w||0,r:+q.r}));
 sets.forEach(q=>{vol+=q.w*q.r;const v=e1(q.w,q.r);if(b>0&&v>b){b=v;if(!prs.includes(e.name))prs.push(e.name)}else if(b===0)b=v});
 if(x.joint)joint=true;return{id:e.id,name:e.name,sets,joint:x.joint}}).filter(x=>x.sets.length);
 if(!ex.length){modal('<h3>Nothing to save</h3><p class="mu">Check off at least one set with reps first.</p><button onclick="modal()">OK</button>');return}
@@ -126,6 +126,17 @@ function doImp(){try{const d=JSON.parse($("#imp").value);if(!d.routines||!d.hist
 function pastQ(){const d=new Date();d.setDate(d.getDate()-1);const ds=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 modal('<h3>Log a past workout</h3><p class="mu">Pick the routine and the day you did it.</p><select id="pqr">'+S.routines.map(r=>'<option value="'+r.id+'">'+esc(r.name)+'</option>').join("")+'</select><input type="date" id="pqd" value="'+ds+'" style="margin:10px 0"><div class="row"><button class="pri" onclick="startPast()">Continue</button><button onclick="modal()">Cancel</button></div>')}
 function startPast(){const v=$("#pqd").value;if(!v)return;const p=v.split("-").map(Number),t=new Date(p[0],p[1]-1,p[2],12).getTime(),rid=$("#pqr").value;modal();start(rid);S.session.date=t;save();render()}
+function nameQ(m,id){modal('<h3>'+(m==="swap"?"Swap for which exercise?":"Add which exercise?")+'</h3><p class="mu">Example: Dumbbell bench press. If you have done it before, your past numbers carry over.</p><input id="nq" placeholder="Exercise name"><div class="row" style="margin-top:10px"><button class="pri" onclick="doName(\''+m+'\',\''+(id||"")+'\')">OK</button><button onclick="modal()">Cancel</button></div>')}
+function doName(m,id){const n=$("#nq").value.trim();if(!n)return;const s=S.session,key=n.toLowerCase();
+let f=exs().find(e=>e.name.toLowerCase()===key);
+if(!f){const x=S.history.flatMap(h=>h.ex).find(x=>x.name.toLowerCase()===key);if(x)f={id:x.id,name:x.name,type:"Weighted",sets:3,lo:8,hi:12,inc:5,rest:90,notes:""}}
+const old=s.list.find(e=>e.id===id);
+const d=f?JSON.parse(JSON.stringify(f)):{id:uid(),name:n,type:"Weighted",sets:old?old.sets:3,lo:old?old.lo:8,hi:old?old.hi:12,inc:old?old.inc:5,rest:old?old.rest:90,notes:""};
+if(s.list.some(e=>e.id===d.id)){modal('<h3>That exercise is already in this workout.</h3><button onclick="modal()">OK</button>');return}
+const t=target(d,false);
+if(m==="swap"&&old){s.list[s.list.indexOf(old)]=d;delete s.ex[old.id]}else s.list.push(d);
+s.ex[d.id]={joint:"",sets:Array.from({length:d.sets},()=>({w:t.w||"",r:"",d:false}))};
+save();modal();render()}
 function delW(d){modal('<h3>Delete this workout?</h3><div class="row"><button class="dng" onclick="doDelW('+d+')">Delete</button><button onclick="modal()">Cancel</button></div>')}
 function doDelW(d){S.history=S.history.filter(h=>h.date!==d);save();modal();render()}
 function delS(d,id,si){const h=S.history.find(h=>h.date===d);if(!h)return;const x=h.ex.find(x=>x.id===id);if(!x)return;x.sets.splice(si,1);if(!x.sets.length)h.ex=h.ex.filter(y=>y!==x);h.vol=Math.round(h.ex.reduce((t,y)=>t+y.sets.reduce((u,s)=>u+s.w*s.r,0),0));if(!h.ex.length)S.history=S.history.filter(y=>y!==h);pinfo="";save();render()}
@@ -155,14 +166,14 @@ return h+`<button style="width:100%;margin-bottom:10px" onclick="draft.ex.push({
 function saveR(){if(!draft.name.trim()){modal('<h3>Give the routine a name.</h3><button onclick="modal()">OK</button>');return}draft.ex=draft.ex.filter(e=>e.name.trim());
 const i=S.routines.findIndex(r=>r.id===draft.id);i>=0?S.routines[i]=draft:S.routines.push(draft);draft=null;save();render()}
 /* ---------- Progress ---------- */
-function vP(){const all=exs();const ids=[...new Set(S.history.flatMap(h=>h.ex.map(x=>x.id)))];
+function vP(){const names=[...new Set(S.history.map(h=>h.routine))];if(pf!=="all"&&!names.includes(pf))pf="all";const hist=S.history.filter(h=>pf==="all"||h.routine===pf);const ids=[...new Set(hist.flatMap(h=>h.ex.map(x=>x.id)))];
 if(!ids.length)return'<h1>Progress</h1><div class="card"><p class="mu">Finish a workout to see charts and history here.</p></div>'+streak();
 const nm=id=>(exs().find(e=>e.id===id)||S.history.flatMap(h=>h.ex).find(x=>x.id===id)).name;
 if(!ids.includes(cx))cx=ids[0];
-return`<h1>Progress</h1><div class="card"><select onchange="cx=this.value;pinfo='';render()">${ids.map(i=>`<option value="${i}" ${i===cx?"selected":""}>${esc(nm(i))}</option>`).join("")}</select>
-<div class="row" style="margin:8px 0">${[["w","Weight"],["e","Est. 1RM"],["v","Volume"]].map(([k,l])=>`<button class="sm ${cm===k?"in":""}" onclick="cm='${k}';pinfo='';render()">${l}</button>`).join("")}</div>
-<div class="sc" id="ch"></div><div class="mu" id="pi">${pinfo||"Tap a dot for details"}</div></div>${streak()}
-<h3>History</h3>`+S.history.slice().reverse().map(h=>`<div class="card"><button class="dng sm" style="float:right" onclick="delW(${h.date})">🗑 Delete</button><b>${esc(h.routine)}</b>${h.joint?'<span class="tag">Modified / Joint-Care</span>':""}${h.prs.length?'<span class="tag">🔥 PR</span>':""}<div class="mu">${new Date(h.date).toLocaleDateString()}${h.dur?" · "+h.dur+" min":""} · ${h.vol.toLocaleString()} lbs</div>${h.ex.map(x=>`<div class="mu">${esc(x.name)}: ${x.sets.map((s,si)=>`<span class="tag" style="margin:2px 4px 2px 0">${s.w}×${s.r}<b onclick="delS(${h.date},'${x.id}',${si})" style="color:#ef4444;padding:8px 6px;cursor:pointer">✕</b></span>`).join("")}${x.joint?" ("+esc(x.joint)+")":""}</div>`).join("")}</div>`).join("")}
+return`<h1>Progress</h1><div class="card"><select onchange="pf=this.value;cx='';pinfo='';render()"><option value="all">All routines</option>${names.map(n=>`<option ${n===pf?"selected":""}>${esc(n)}</option>`).join("")}</select><select style="margin-top:8px" onchange="cx=this.value;pinfo='';render()">${ids.map(i=>`<option value="${i}" ${i===cx?"selected":""}>${esc(nm(i))}</option>`).join("")}</select>
+<div class="row" style="margin:8px 0">${[["w","Weight"],["e","Est. 1RM"],["v","Volume"]].map(([k,l])=>`<button class="sm ${cm===k?"in":""}" onclick="cm='${k}';pinfo='';render()">${l}</button>`).join("")}</div><div class="row" style="margin-bottom:8px">${[["l","Line"],["b","Bar"]].map(([k,l])=>`<button class="sm ${ct===k?"in":""}" onclick="ct='${k}';pinfo='';render()">${l}</button>`).join("")}</div>
+<div class="sc" id="ch"></div><div class="mu" id="pi">${pinfo||"Tap a dot or bar for details"}</div></div><div class="card"><h3>Volume per workout</h3><div class="sc" id="vb"></div><div class="mu" id="vi">Tap a bar for details</div></div>${streak()}
+<h3>History</h3>`+hist.slice().reverse().map(h=>`<div class="card"><button class="dng sm" style="float:right" onclick="delW(${h.date})">🗑 Delete</button><b>${esc(h.routine)}</b>${h.joint?'<span class="tag">Modified / Joint-Care</span>':""}${h.prs.length?'<span class="tag">🔥 PR</span>':""}<div class="mu">${new Date(h.date).toLocaleDateString()}${h.dur?" · "+h.dur+" min":""} · ${h.vol.toLocaleString()} lbs</div>${h.ex.map(x=>`<div class="mu">${esc(x.name)}: ${x.sets.map((s,si)=>`<span class="tag" style="margin:2px 4px 2px 0">${s.w}×${s.r}<b onclick="delS(${h.date},'${x.id}',${si})" style="color:#ef4444;padding:8px 6px;cursor:pointer">✕</b></span>`).join("")}${x.joint?" ("+esc(x.joint)+")":""}</div>`).join("")}</div>`).join("")}
 function chart(){const el=$("#ch");if(!el)return;const pts=[];
 S.history.forEach(h=>{const x=h.ex.find(x=>x.id===cx);if(!x)return;const s=x.sets;
 const v=cm==="w"?Math.max(...s.map(a=>a.w)):cm==="e"?Math.max(...s.map(a=>e1(a.w,a.r))):s.reduce((t,a)=>t+a.w*a.r,0);
@@ -172,6 +183,11 @@ const X=i=>p+(pts.length>1?i*(W-2*p)/(pts.length-1):(W-2*p)/2),Y=v=>H-p-(v-mn)/r
 el.innerHTML=`<svg width="${W}" height="${H}"><polyline fill="none" stroke="#10b981" stroke-width="2.5" points="${pts.map((a,i)=>X(i)+","+Y(a.v)).join(" ")}"/>
 ${pts.map((a,i)=>`<circle cx="${X(i)}" cy="${Y(a.v)}" r="9" fill="${a.j?"#f59e0b":"#6366f1"}" stroke="#fff" stroke-width="2" style="cursor:pointer" onclick="dot(${i})"/><text x="${X(i)}" y="${H-8}" text-anchor="middle">${new Date(a.d).getMonth()+1}/${new Date(a.d).getDate()}</text>`).join("")}
 <text x="2" y="${Y(mx)+3}">${Math.round(mx)}</text><text x="2" y="${Y(mn)+3}">${Math.round(mn)}</text></svg>`;window._pts=pts}
+function barSvg(pts,fn){const n=pts.length,W=Math.max(320,n*46),H=200,p=28,sl=(W-2*p)/n,bw=Math.min(34,sl-6),mx=Math.max(...pts.map(a=>a.v),1);
+return`<svg width="${W}" height="${H}">`+pts.map((a,i)=>{const x=p+i*sl+(sl-bw)/2,hh=a.v/mx*(H-2*p),d=new Date(a.d);return`<rect x="${x}" y="${H-p-hh}" width="${bw}" height="${Math.max(hh,2)}" rx="4" fill="${a.j?"#f59e0b":"#10b981"}" style="cursor:pointer" onclick="${fn}(${i})"/><text x="${x+bw/2}" y="${H-10}" text-anchor="middle">${d.getMonth()+1}/${d.getDate()}</text>`}).join("")+`<text x="2" y="14">${Math.round(mx)}</text></svg>`}
+function bars(){if(ct==="b"&&window._pts&&$("#ch"))$("#ch").innerHTML=barSvg(window._pts,"dot");
+const vb=$("#vb");if(!vb)return;const hs=S.history.filter(h=>pf==="all"||h.routine===pf);window._vp=hs.map(h=>({v:h.vol,d:h.date,j:h.joint,r:h.routine}));vb.innerHTML=window._vp.length?barSvg(window._vp,"vdot"):""}
+function vdot(i){const a=window._vp[i];$("#vi").textContent=new Date(a.d).toLocaleDateString()+" · "+a.r+" · "+a.v.toLocaleString()+" lbs total"+(a.j?" · joint-care":"")}
 function dot(i){const a=window._pts[i];pinfo=new Date(a.d).toLocaleDateString()+": "+a.v+" · sets "+a.s.map(s=>s.w+"×"+s.r).join(", ")+(a.j?" · joint-care ("+a.j+")":"");$("#pi").textContent=pinfo}
 render();if(S.session&&false)rtStop();
 </script></body></html>
